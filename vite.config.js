@@ -21,7 +21,7 @@ export default defineConfig({
       includeAssets: ['favicon.svg', 'apple-touch-icon.png', 'sw-notify.js'],
       manifest: {
         id: '/',
-        name: 'Personal Messenger',
+        name: 'Messenger',
         short_name: 'Messenger',
         description: 'Private messenger for invited users',
         lang: 'en',

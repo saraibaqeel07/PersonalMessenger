@@ -1,0 +1,121 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------- helpers ----------
+    function signedIn() {
+      return request.auth != null;
+    }
+    function uid() {
+      return request.auth.uid;
+    }
+    function userPath(id) {
+      return /databases/$(database)/documents/users/$(id);
+    }
+    // A signed-in user that has a profile created by the admin and is not disabled.
+    function isActive() {
+      return signedIn() && exists(userPath(uid())) && get(userPath(uid())).data.disabled != true;
+    }
+    function isAdmin() {
+      return isActive() && get(userPath(uid())).data.role == 'admin';
+    }
+    function chatIdOf(a, b) {
+      return a < b ? a + '_' + b : b + '_' + a;
+    }
+    function isParticipant(chatId) {
+      return uid() in get(/databases/$(database)/documents/chats/$(chatId)).data.participants;
+    }
+
+    // ---------- first-run setup ----------
+    // config/setup is created once, together with the very first admin profile.
+    // After it exists nobody can create their own profile again.
+    match /config/setup {
+      allow read: if true;
+      allow create: if signedIn()
+        && request.resource.data.adminUid == uid()
+        && getAfter(userPath(uid())).data.role == 'admin';
+      allow update, delete: if false;
+    }
+
+    // ---------- users ----------
+    match /users/{userId} {
+      allow read: if isActive();
+
+      allow create: if isAdmin()
+        || (
+          // bootstrap: first admin creates own profile while config/setup does not exist yet
+          signedIn() && userId == uid()
+          && request.resource.data.role == 'admin'
+          && !exists(/databases/$(database)/documents/config/setup)
+          && existsAfter(/databases/$(database)/documents/config/setup)
+        );
+
+      allow update: if isAdmin()
+        || (
+          isActive() && userId == uid()
+          && request.resource.data.diff(resource.data).affectedKeys()
+               .hasOnly(['displayName', 'displayNameLower', 'lastSeen', 'color'])
+        );
+
+      allow delete: if isAdmin();
+    }
+
+    // ---------- friend requests ----------
+    // id = fromUid_toUid
+    match /friendRequests/{reqId} {
+      allow read: if isActive()
+        && (resource.data.from == uid() || resource.data.to == uid());
+
+      allow create: if isActive()
+        && request.resource.data.from == uid()
+        && request.resource.data.to != uid()
+        && reqId == uid() + '_' + request.resource.data.to
+        && exists(userPath(request.resource.data.to))
+        && !exists(/databases/$(database)/documents/chats/$(chatIdOf(uid(), request.resource.data.to)));
+
+      allow update: if false;
+
+      allow delete: if isActive()
+        && (resource.data.from == uid() || resource.data.to == uid());
+    }
+
+    // ---------- chats (one per friendship) ----------
+    // id = smallerUid_biggerUid
+    match /chats/{chatId} {
+      function otherOf(list) {
+        return list[0] == uid() ? list[1] : list[0];
+      }
+
+      allow read: if isActive() && uid() in resource.data.participants;
+
+      // Created only by the receiver of a pending friend request (accepting it).
+      allow create: if isActive()
+        && request.resource.data.participants is list
+        && request.resource.data.participants.size() == 2
+        && uid() in request.resource.data.participants
+        && chatId == chatIdOf(request.resource.data.participants[0], request.resource.data.participants[1])
+        && exists(/databases/$(database)/documents/friendRequests/$(otherOf(request.resource.data.participants) + '_' + uid()));
+
+      allow update: if isActive()
+        && uid() in resource.data.participants
+        && request.resource.data.participants == resource.data.participants;
+
+      allow delete: if isActive() && uid() in resource.data.participants;
+
+      match /messages/{messageId} {
+        allow read: if isActive() && isParticipant(chatId);
+
+        allow create: if isActive() && isParticipant(chatId)
+          && request.resource.data.senderId == uid();
+
+        // only "seen" receipts can change
+        allow update: if isActive() && isParticipant(chatId)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['seenBy']);
+
+        // either side can delete (needed for disappearing messages & unfriend)
+        allow delete: if isActive() && isParticipant(chatId);
+      }
+    }
+  }
+}

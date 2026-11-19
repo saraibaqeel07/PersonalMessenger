@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { Search, MessageCircle, Timer, Ghost } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
-import { formatListTime, otherUid } from '../lib/utils';
+import { formatListTime, otherUid, toDate } from '../lib/utils';
 import { Avatar, Header, Empty, listItem, Spinner } from '../components/ui';
 
 export default function Chats() {
@@ -51,7 +51,10 @@ export default function Chats() {
             {list.map(({ chat, user }, i) => {
               const unread = chat.unread?.[profile.uid] || 0;
               const typing = chat.typing?.[user.uid];
-              const last = chat.lastMessage;
+              // hide the preview of a message I cleared
+              const clearedAt = toDate(chat.clearedAt?.[profile.uid])?.getTime() || 0;
+              const lm = chat.lastMessage;
+              const last = lm && (toDate(lm.createdAt)?.getTime() || Date.now()) > clearedAt ? lm : null;
               const preview = typing
                 ? 'typing…'
                 : last

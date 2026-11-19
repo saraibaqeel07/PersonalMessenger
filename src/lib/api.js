@@ -12,6 +12,8 @@ import {
   Timestamp,
   query,
   limit,
+  where,
+  getDoc,
 } from 'firebase/firestore';
 import { createUserWithEmailAndPassword, updatePassword, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
 import { db, auth, createAuthUserAsAdmin } from './firebase';
@@ -137,6 +139,41 @@ export async function unfriend(chatId) {
     await batch.commit();
   }
   await deleteDoc(doc(db, 'chats', chatId));
+}
+
+/**
+ * Clear chat — only for me (like WhatsApp). The other person keeps their messages.
+ * Messages are hidden for me up to now. If the other person has also cleared, the
+ * messages neither of us can see anymore are deleted from the database.
+ */
+export async function clearChatForMe(chatId, myUid) {
+  const chatRef = doc(db, 'chats', chatId);
+  await updateDoc(chatRef, {
+    [`clearedAt.${myUid}`]: serverTimestamp(),
+    [`unread.${myUid}`]: 0,
+  });
+
+  // housekeeping: delete messages that BOTH sides have cleared
+  try {
+    const snap = await getDoc(chatRef);
+    const data = snap.data() || {};
+    const other = (data.participants || []).find((p) => p !== myUid);
+    const mine = data.clearedAt?.[myUid];
+    const theirs = other && data.clearedAt?.[other];
+    if (!mine || !theirs) return;
+    const cutoff = mine.toMillis() < theirs.toMillis() ? mine : theirs;
+    const msgsRef = collection(db, 'chats', chatId, 'messages');
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      const old = await getDocs(query(msgsRef, where('createdAt', '<=', cutoff), limit(400)));
+      if (old.empty) break;
+      const batch = writeBatch(db);
+      old.docs.forEach((d) => batch.delete(d.ref));
+      await batch.commit();
+    }
+  } catch {
+    /* cleanup is best-effort */
+  }
 }
 
 /* ---------------- messages ---------------- */

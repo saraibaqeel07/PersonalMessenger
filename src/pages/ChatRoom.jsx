@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { AnimatePresence, motion } from 'framer-motion';
 import { useNavigate, useParams } from 'react-router-dom';
 import { collection, limitToLast, onSnapshot, orderBy, query } from 'firebase/firestore';
-import { ArrowLeft, MoreVertical, Smile, Send, Keyboard, Ghost, Timer, Infinity as InfinityIcon, Check, CheckCheck, UserMinus, Trash2 } from 'lucide-react';
+import { ArrowLeft, MoreVertical, Smile, Send, Keyboard, Ghost, Timer, Infinity as InfinityIcon, Check, CheckCheck, UserMinus, Trash2, Eraser } from 'lucide-react';
 import { db } from '../lib/firebase';
 import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
@@ -14,6 +14,7 @@ import {
   setDisappearMode,
   setTyping,
   unfriend,
+  clearChatForMe,
 } from '../lib/api';
 import { DISAPPEAR_MODES, formatDayLabel, formatTime, friendlyAuthError, lastSeenLabel, otherUid, toDate } from '../lib/utils';
 import { Avatar, Sheet, Spinner, useToast, spring } from '../components/ui';
@@ -93,13 +94,18 @@ export default function ChatRoom() {
     };
   }, []);
 
+  // "Clear chat" is per person: hide everything up to the moment I cleared
+  const clearedAtMs = toDate(chat?.clearedAt?.[myUid])?.getTime() || 0;
+
   const visible = useMemo(() => {
     if (!messages) return [];
     return messages.filter((m) => {
       const exp = toDate(m.expireAt);
-      return !exp || exp.getTime() > now;
+      if (exp && exp.getTime() <= now) return false;
+      const created = toDate(m.createdAt)?.getTime() || m.clientTime || Date.now();
+      return created > clearedAtMs;
     });
-  }, [messages, now]);
+  }, [messages, now, clearedAtMs]);
 
   // clean up expired 24h messages
   useEffect(() => {
@@ -355,6 +361,15 @@ export default function ChatRoom() {
             toast(friendlyAuthError(err), 'error');
           }
         }}
+        onClear={async () => {
+          setMenuOpen(false);
+          try {
+            await clearChatForMe(chatId, myUid);
+            toast('Chat cleared');
+          } catch (err) {
+            toast(friendlyAuthError(err), 'error');
+          }
+        }}
         onUnfriend={async () => {
           setMenuOpen(false);
           try {
@@ -490,11 +505,12 @@ function LongPress({ onLongPress, children, className }) {
   );
 }
 
-function ChatMenu({ open, onClose, mode, onMode, onUnfriend, other }) {
-  const [confirm, setConfirm] = useState(false);
+function ChatMenu({ open, onClose, mode, onMode, onClear, onUnfriend, other }) {
+  const [confirm, setConfirm] = useState(null); // null | 'clear' | 'remove'
   useEffect(() => {
-    if (!open) setConfirm(false);
+    if (!open) setConfirm(null);
   }, [open]);
+  const firstName = other?.displayName?.split(' ')[0] || 'friend';
   return (
     <Sheet open={open} onClose={onClose}>
       <h3>Disappearing messages</h3>
@@ -523,16 +539,35 @@ function ChatMenu({ open, onClose, mode, onMode, onUnfriend, other }) {
       <div style={{ height: 8 }} />
       <AnimatePresence mode="wait" initial={false}>
         {!confirm ? (
-          <motion.button key="a" className="btn danger" whileTap={{ scale: 0.97 }} onClick={() => setConfirm(true)} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-            <UserMinus size={18} /> Remove {other?.displayName?.split(' ')[0] || 'friend'}
-          </motion.button>
+          <motion.div key="a" style={{ display: 'grid', gap: 10 }} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+            <motion.button className="btn secondary" whileTap={{ scale: 0.97 }} onClick={() => setConfirm('clear')}>
+              <Eraser size={18} /> Clear chat
+            </motion.button>
+            <motion.button className="btn danger" whileTap={{ scale: 0.97 }} onClick={() => setConfirm('remove')}>
+              <UserMinus size={18} /> Remove {firstName}
+            </motion.button>
+          </motion.div>
+        ) : confirm === 'clear' ? (
+          <motion.div key="c" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
+            <p className="note" style={{ marginTop: 0 }}>
+              Clear all messages in this chat for you? {firstName} will still see them.
+            </p>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button className="btn secondary" onClick={() => setConfirm(null)}>
+                Cancel
+              </button>
+              <button className="btn danger" onClick={onClear}>
+                Clear
+              </button>
+            </div>
+          </motion.div>
         ) : (
           <motion.div key="b" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
             <p className="note" style={{ marginTop: 0 }}>
               This deletes the whole chat for both of you. You can send a new friend request later.
             </p>
             <div style={{ display: 'flex', gap: 10 }}>
-              <button className="btn secondary" onClick={() => setConfirm(false)}>
+              <button className="btn secondary" onClick={() => setConfirm(null)}>
                 Cancel
               </button>
               <button className="btn danger" onClick={onUnfriend}>

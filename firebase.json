@@ -9,7 +9,7 @@
     "rewrites": [{ "source": "**", "destination": "/index.html" }],
     "headers": [
       {
-        "source": "/sw.js",
+        "source": "/@(sw|sw-notify).js",
         "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
       }
     ]

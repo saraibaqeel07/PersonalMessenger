@@ -1,12 +1,13 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { Navigate, Route, Routes, useLocation, useOutlet, NavLink } from 'react-router-dom';
-import { MessageCircle, Users, UserPlus, User, Shield } from 'lucide-react';
+import { MessageCircle, Users, UserPlus, User, Shield, Heart } from 'lucide-react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { DataProvider, useData } from './context/DataContext';
 import { ToastProvider, Logo, Spinner, spring } from './components/ui';
 import { isFirebaseConfigured } from './lib/firebase';
 import Login from './pages/Login';
 import Chats from './pages/Chats';
+import Friends from './pages/Friends';
 import People from './pages/People';
 import Requests from './pages/Requests';
 import Profile from './pages/Profile';
@@ -75,6 +76,7 @@ function MainRoutes() {
       <Routes location={location} key={inChat ? location.pathname : 'tabs'}>
         <Route element={<TabsLayout />}>
           <Route path="/" element={<Chats />} />
+          <Route path="/friends" element={<Friends />} />
           <Route path="/people" element={<People />} />
           <Route path="/requests" element={<Requests />} />
           <Route path="/profile" element={<Profile />} />
@@ -95,6 +97,7 @@ function TabsLayout() {
 
   const tabs = [
     { to: '/', label: 'Chats', icon: MessageCircle, badge: unreadTotal },
+    { to: '/friends', label: 'Friends', icon: Heart },
     { to: '/people', label: 'People', icon: Users },
     { to: '/requests', label: 'Requests', icon: UserPlus, badge: incoming.length },
     ...(isAdmin ? [{ to: '/admin', label: 'Admin', icon: Shield }] : []),

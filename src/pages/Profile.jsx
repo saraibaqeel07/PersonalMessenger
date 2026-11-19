@@ -1,48 +1,66 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Pencil, Lock, LogOut, Download, Mail, Shield } from 'lucide-react';
+import { Pencil, Lock, LogOut, Download, Mail, Shield, Bell, BellOff, Share, PlusSquare, MoreVertical } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
 import { updateMyName, changeMyPassword } from '../lib/api';
 import { friendlyAuthError } from '../lib/utils';
+import { useInstall, promptInstall, notifyEnabled, notifySupported, enableNotifications, disableNotifications } from '../lib/pwa';
 import { Avatar, Header, Sheet, Spinner, useToast, spring } from '../components/ui';
 
 export default function Profile() {
   const { profile, logout } = useAuth();
   const { chats } = useData();
   const toast = useToast();
-  const [sheet, setSheet] = useState(null); // 'name' | 'password'
-  const [installEvt, setInstallEvt] = useState(null);
+  const [sheet, setSheet] = useState(null); // 'name' | 'password' | 'install'
+  const { canPrompt, installed, ios } = useInstall();
+  const [notifyOn, setNotifyOn] = useState(notifyEnabled());
 
-  useEffect(() => {
-    const h = (e) => {
-      e.preventDefault();
-      setInstallEvt(e);
-    };
-    window.addEventListener('beforeinstallprompt', h);
-    return () => window.removeEventListener('beforeinstallprompt', h);
-  }, []);
+  const install = async () => {
+    if (canPrompt) {
+      const outcome = await promptInstall();
+      if (outcome === 'accepted') toast('Installing… find Messenger on your home screen');
+    } else {
+      setSheet('install');
+    }
+  };
 
-  const standalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+  const toggleNotify = async () => {
+    if (notifyOn) {
+      disableNotifications();
+      setNotifyOn(false);
+      toast('Notifications off');
+      return;
+    }
+    if (!notifySupported()) {
+      toast(ios && !installed ? 'Install the app first to get notifications on iPhone' : 'Notifications are not supported here', 'error');
+      return;
+    }
+    const perm = await enableNotifications();
+    if (perm === 'granted') {
+      setNotifyOn(true);
+      toast('Notifications on');
+    } else {
+      toast('Notifications are blocked. Allow them in your browser/site settings.', 'error');
+    }
+  };
 
   const rows = [
     { icon: Pencil, label: 'Change name', onClick: () => setSheet('name') },
     { icon: Lock, label: 'Change password', onClick: () => setSheet('password') },
-    ...(!standalone
+    {
+      icon: notifyOn ? Bell : BellOff,
+      label: 'Message notifications',
+      sub: notifyOn ? 'On — tap to turn off' : 'Off — tap to turn on',
+      onClick: toggleNotify,
+    },
+    ...(!installed
       ? [
           {
             icon: Download,
             label: 'Install app',
-            sub: installEvt ? 'Add to your home screen' : 'Browser menu → Add to Home Screen',
-            onClick: async () => {
-              if (installEvt) {
-                installEvt.prompt();
-                await installEvt.userChoice;
-                setInstallEvt(null);
-              } else {
-                toast('Use your browser menu: "Add to Home Screen"');
-              }
-            },
+            sub: canPrompt ? 'One tap — adds Messenger to your home screen' : 'Add Messenger to your home screen',
+            onClick: install,
           },
         ]
       : []),
@@ -98,6 +116,7 @@ export default function Profile() {
 
       <NameSheet open={sheet === 'name'} onClose={() => setSheet(null)} profile={profile} toast={toast} />
       <PasswordSheet open={sheet === 'password'} onClose={() => setSheet(null)} toast={toast} />
+      <InstallSheet open={sheet === 'install'} onClose={() => setSheet(null)} ios={ios} />
     </>
   );
 }
@@ -186,6 +205,45 @@ function PasswordSheet({ open, onClose, toast }) {
           {busy ? <Spinner /> : 'Update password'}
         </button>
       </form>
+    </Sheet>
+  );
+}
+
+function InstallSheet({ open, onClose, ios }) {
+  const steps = ios
+    ? [
+        { icon: Share, text: <>Tap the <b>Share</b> button in Safari's toolbar</> },
+        { icon: PlusSquare, text: <>Choose <b>Add to Home Screen</b></> },
+        { icon: Download, text: <>Tap <b>Add</b> — open Messenger from your home screen</> },
+      ]
+    : [
+        { icon: MoreVertical, text: <>Open the browser menu <b>⋮</b></> },
+        { icon: Download, text: <>Tap <b>Install app</b> (or <b>Add to Home screen</b>)</> },
+        { icon: PlusSquare, text: <>Confirm — Messenger opens like a normal app</> },
+      ];
+  return (
+    <Sheet open={open} onClose={onClose}>
+      <h3>Install Messenger</h3>
+      <p className="lead">
+        {ios ? 'On iPhone/iPad apps are installed from Safari.' : 'Your browser did not offer one-tap install yet. You can do it from the menu:'}
+      </p>
+      <div className="card" style={{ margin: '8px 0 16px' }}>
+        {steps.map((s, i) => (
+          <div key={i} className="row" style={{ cursor: 'default' }}>
+            <div className="row-icon">
+              <s.icon size={18} />
+            </div>
+            <div className="row-main">
+              <div className="row-sub" style={{ color: 'inherit', whiteSpace: 'normal' }}>
+                {i + 1}. {s.text}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+      <button className="btn" onClick={onClose}>
+        Got it
+      </button>
     </Sheet>
   );
 }

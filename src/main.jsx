@@ -1,6 +1,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
+import './lib/pwa'; // capture the install prompt as early as possible
 import App from './App';
 import './styles.css';
 

@@ -5,3 +5,9 @@ dev-dist
 .env.local
 *.log
 .firebase
+
+# push server
+push-server/node_modules
+push-server/.vercel
+*service-account*.json
+*firebase-adminsdk*.json

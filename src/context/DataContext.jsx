@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { setAppBadge, showMessageNotification } from '../lib/pwa';
+import { pushConfigured, setAppBadge, showMessageNotification } from '../lib/pwa';
 import { useToast } from '../components/ui';
 import { collection, onSnapshot, query, where } from 'firebase/firestore';
 import { db } from '../lib/firebase';
@@ -113,7 +113,8 @@ export function DataProvider({ children }) {
       const name = sender?.displayName || 'New message';
       const body = last.type === 'gif' && !last.text?.startsWith('👻') ? 'Sent a GIF' : last.text;
       if (document.hidden) {
-        showMessageNotification({ title: name, body, chatId: c.id });
+        // with real push set up, the service worker shows it (avoid double alerts)
+        if (!pushConfigured) showMessageNotification({ title: name, body, chatId: c.id });
       } else {
         toast(`${name}: ${body}`);
       }

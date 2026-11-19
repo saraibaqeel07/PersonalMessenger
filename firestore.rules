@@ -61,6 +61,15 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // ---------- push tokens (one doc per device; id = FCM token) ----------
+    // Only the owner can see/write them. The push server uses the Admin SDK.
+    match /pushTokens/{token} {
+      allow read, delete: if signedIn() && resource.data.uid == uid();
+      allow create, update: if isActive()
+        && request.resource.data.uid == uid()
+        && request.resource.data.keys().hasOnly(['uid', 'ua', 'updatedAt']);
+    }
+
     // ---------- friend requests ----------
     // id = fromUid_toUid
     match /friendRequests/{reqId} {

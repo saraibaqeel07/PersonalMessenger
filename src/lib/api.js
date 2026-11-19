@@ -16,6 +16,7 @@ import {
 import { createUserWithEmailAndPassword, updatePassword, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
 import { db, auth, createAuthUserAsAdmin } from './firebase';
 import { chatIdOf, randomColor } from './utils';
+import { notifyChat } from './push';
 
 /* ---------------- users ---------------- */
 
@@ -177,6 +178,7 @@ export async function sendMessage({ chatId, myUid, otherUid, msg, mode }) {
     [`typing.${myUid}`]: false,
   });
   await batch.commit();
+  notifyChat(chatId); // push to the other person (works even if their app is closed)
 }
 
 export function markChatRead(chatId, myUid) {

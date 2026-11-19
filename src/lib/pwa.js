@@ -1,4 +1,7 @@
 import { useEffect, useState } from 'react';
+import { pushConfigured, registerPush, unregisterPush } from './push';
+
+export { pushConfigured };
 
 /*
  * Install handling.
@@ -67,7 +70,7 @@ export function notifyEnabled() {
   }
 }
 
-export async function enableNotifications() {
+export async function enableNotifications(uid) {
   if (!notifySupported()) return 'unsupported';
   const perm = await Notification.requestPermission();
   try {
@@ -75,6 +78,7 @@ export async function enableNotifications() {
   } catch {
     /* ignore */
   }
+  if (perm === 'granted' && uid) await registerPush(uid);
   return perm; // 'granted' | 'denied' | 'default'
 }
 
@@ -84,6 +88,7 @@ export function disableNotifications() {
   } catch {
     /* ignore */
   }
+  return unregisterPush();
 }
 
 export async function showMessageNotification({ title, body, chatId, icon }) {

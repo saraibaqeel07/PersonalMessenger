@@ -36,7 +36,7 @@ export default function Profile() {
       toast(ios && !installed ? 'Install the app first to get notifications on iPhone' : 'Notifications are not supported here', 'error');
       return;
     }
-    const perm = await enableNotifications();
+    const perm = await enableNotifications(profile.uid);
     if (perm === 'granted') {
       setNotifyOn(true);
       toast('Notifications on');

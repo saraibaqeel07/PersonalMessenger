@@ -3,6 +3,8 @@ import { onAuthStateChanged, signInWithEmailAndPassword, signOut } from 'firebas
 import { doc, onSnapshot } from 'firebase/firestore';
 import { auth, db } from '../lib/firebase';
 import { touchLastSeen } from '../lib/api';
+import { notifyEnabled } from '../lib/pwa';
+import { registerPush, unregisterPush } from '../lib/push';
 
 const AuthContext = createContext(null);
 
@@ -61,6 +63,11 @@ export function AuthProvider({ children }) {
     };
   }, [authUser]);
 
+  // keep this device's push token fresh (tokens can rotate)
+  useEffect(() => {
+    if (profile?.uid && notifyEnabled()) registerPush(profile.uid);
+  }, [profile?.uid]);
+
   // presence heartbeat
   useEffect(() => {
     if (!profile?.uid) return undefined;
@@ -80,7 +87,10 @@ export function AuthProvider({ children }) {
     await signInWithEmailAndPassword(auth, email.trim(), password);
   };
 
-  const logout = () => signOut(auth);
+  const logout = async () => {
+    await unregisterPush(); // stop pushes for this account on this device
+    await signOut(auth);
+  };
 
   const loading = authUser === undefined || (!!authUser && !profile);
 
